@@ -214,6 +214,7 @@ class MaestroMonitor(object):
         rb_aggs = []
         n = len(grp_aggs)
         for agg in reversed(grp_aggs):
+            agg_set_add = False
             for smplr in list(grp_sets):
                 for set_ in list(grp_sets[smplr]['sets']):
                     if smplr not in self.aggregators[group][agg]['prdcrs']:
@@ -221,25 +222,23 @@ class MaestroMonitor(object):
                         self.aggregators[group][agg]['prdcrs'][smplr]['sets'] = {}
                     rem -= grp_sets[smplr]['sets'][set_]
                     self.aggregators[group][agg]['prdcrs'][smplr]['sets'][set_] = grp_sets[smplr]['sets'].pop(set_)
+                    agg_set_add = True
                     break
-                break
+                if agg_set_add == True:
+                    break
         return rem
 
     def balance_sets(self, group, grp_aggs, grp_sets, bytes_per_agg):
         for agg in grp_aggs:
             agg_set_size = 0
             for smplr in list(grp_sets):
-                if agg_set_size + grp_sets[smplr]['smplr_set_size'] <= bytes_per_agg and grp_sets[smplr]['smplr_set_size'] != 0:
-                    agg_set_size += grp_sets[smplr]['smplr_set_size']
-                    self.aggregators[group][agg]['prdcrs'][smplr] = grp_sets.pop(smplr)
-                else:
-                    for set_ in list(grp_sets[smplr]['sets']):
-                        if agg_set_size + grp_sets[smplr]['sets'][set_] <= bytes_per_agg and grp_sets[smplr]['sets'][set_] != 0:
-                            agg_set_size += grp_sets[smplr]['sets'][set_]
-                            if smplr not in self.aggregators[group][agg]['prdcrs']:
-                                self.aggregators[group][agg]['prdcrs'][smplr] = {}
-                                self.aggregators[group][agg]['prdcrs'][smplr]['sets'] = {}
-                            self.aggregators[group][agg]['prdcrs'][smplr]['sets'][set_] = grp_sets[smplr]['sets'].pop(set_)
+                for set_ in list(grp_sets[smplr]['sets']):
+                    if agg_set_size + grp_sets[smplr]['sets'][set_] <= bytes_per_agg and grp_sets[smplr]['sets'][set_] != 0:
+                        agg_set_size += grp_sets[smplr]['sets'][set_]
+                        if smplr not in self.aggregators[group][agg]['prdcrs']:
+                            self.aggregators[group][agg]['prdcrs'][smplr] = {}
+                            self.aggregators[group][agg]['prdcrs'][smplr]['sets'] = {}
+                        self.aggregators[group][agg]['prdcrs'][smplr]['sets'][set_] = grp_sets[smplr]['sets'].pop(set_)
             self.aggregators[group][agg]['agg_set_size'] = agg_set_size
         return grp_sets
 
@@ -267,9 +266,13 @@ class MaestroMonitor(object):
                 all_sets[group]['prdcrs'][self.producers[group][prdcr]['name']] = {}
                 all_sets[group]['prdcrs'][self.producers[group][prdcr]['name']]['sets'] = {}
                 for dset in dlist:
-                    smplr_set_size += dset.data_size
-                    all_sets[group]['prdcrs'][self.producers[group][prdcr]['name']]['sets'][dset.name] = dset.data_size
-                all_sets[group]['prdcrs'][self.producers[group][prdcr]['name']]['smplr_set_size'] = smplr_set_size
+                    if 'updt_hint_us' not in dset.info:
+                        intrvl = 1000000
+                    intrvl = int(dset.info['updt_hint_us'].split(':')[0])
+                    freq = 1000000 / intrvl
+                    set_weight = freq * dset.data_size
+                    smplr_set_size += set_weight
+                    all_sets[group]['prdcrs'][self.producers[group][prdcr]['name']]['sets'][dset.name] = set_weight
                 dset_size += smplr_set_size
             all_sets[group]['dset_size'] = dset_size
         return all_sets

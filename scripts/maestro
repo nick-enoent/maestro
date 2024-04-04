@@ -516,7 +516,8 @@ def config_samplers(comms, samplers, daemons):
                 return False
             print(f'Adding sampler plugins to sampler {smplr}')
             for plugin in samplers[smplr_group]['plugins']:
-                err, rc = comm.plugn_load(plugin['name'])
+                plugin_t = check_opt('plugin', plugin)
+                err, rc = comm.plugn_load(plugin['name'], plugin_t)
                 if err == 17:
                     print(f'File exists: {rc}')
                 elif err != 0:
@@ -780,7 +781,8 @@ def add_stores(comms, stores, aggregators, daemons, agg_state):
                 # Load and configure the plugin required by the store
                 plugin = store['plugin']
                 plugin_name = plugin['name']
-                err, res = comm.plugn_load(plugin_name)
+                plugin_t = check_opt('plugin', store['plugin'])
+                err, res = comm.plugn_load(plugin_name, plugin_t)
                 for cfg_ in plugin['config']:
                     if type(cfg_) is dict:
                         cfg_str = parse_to_cfg_str(cfg_)

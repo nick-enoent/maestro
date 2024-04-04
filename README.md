@@ -180,18 +180,20 @@ aggregators:
 samplers:
   - daemons : *samplers
     plugins :
-      - name        : meminfo # Variables can be specific to plugin
-        interval    : "1.0s" # Used when starting the sampler plugin
+      - name        : meminfo1 # Unique name for plugin in the event of multi-instance plugins
+        plugin      : meminfo  # The name of the plugin to load.
+        interval    : "1.0s"   # Used when starting the sampler plugin
         offset      : "0ms"
         config      : # Config is a list of dictionaries or strings that defines a plugin configuration
                       # A config command will be submitted for each string/dictionary in the list
+                      # Variables can be specific to plugin
           - schema       : meminfo
             component_id : ${LDMS_COMPONENT_ID} # uses an environment variable to set the component_id
             producer     : ${HOSTNAME}
             instance     : ${HOSTNAME}/meminfo
             perm         : "0o777"
 
-      - name        : vmstat
+      - name        : vmstat # If the "plugin" attribute is not specified, the "name" will be loaded as the plugin.
         interval    : "1.0s"
         offset      : "0ms"
         config      :

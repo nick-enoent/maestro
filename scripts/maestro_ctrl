@@ -380,7 +380,8 @@ class ClusterCtrl(object):
             print(f'e.g. samplers:')
             print(f'       - daemons : "samplers"')
             print(f'         plugins :')
-            print(f'           - name        : meminfo')
+            print(f'           - name        : meminfo1')
+            print(f'             plugin      : meminfo')
             print(f'             interval    : "1.0s"')
             print(f'             offset      : "0s"')
             print(f'             config :')
@@ -608,22 +609,33 @@ class ClusterCtrl(object):
     def write_samplers(self, fd, smplr_group):
         for sampler in self.samplers[smplr_group]['plugins']:
             sname = sampler['name']
-            fd.write(f'load name={sname}\n')
+            fd.write(f'load name={sname}')
+            if 'plugin' in sampler:
+                fd.write(f' plugin={sampler["plugin"]}')
+            fd.write('\n')
             for cfg_ in sampler['config']:
                 if type(cfg_) is dict:
                     hostname = socket.gethostname()
-                    if args.local:
-                        cfg_args = { 'producer'     : f'{hostname}',
-                                     'instance'     : f'{hostname}/{sampler["name"]}',
-                                     'component_id' : '${LDMS_COMPONENT_ID}' }
-                    else:
-                        cfg_args = {}
-                    check_required(['producer', 'instance'], cfg_,
-                                    'sampler plugin "config"')
+                    prdcr = check_opt('producer', cfg_)
+                    cfg_args = {}
+                    if not prdcr:
+                        if args.local:
+                            cfg_args = { 'producer' : f'{hostname}' }
+                        else:
+                            cfg_args = { 'producer' : f'{sname}' }
+                    inst = check_opt('instance', cfg_)
+                    if not inst:
+                        if args.local:
+                            cfg_args['instance'] = f'{hostname}/{sname}'
+                        else:
+                            cfg_args['instance'] = '${HOSTNAME}/'+f'{sname}'
+                    comp_id = check_opt('component_id', cfg_)
+                    if not comp_id:
+                        cfg_args['component_id'] = '${LDMS_COMPONENT_ID}'
                     for attr in cfg_:
                         if attr == 'name' or attr == 'interval':
                             continue
-                    cfg_args[attr] = cfg_[attr]
+                        cfg_args[attr] = cfg_[attr]
                     cfg_str = parse_to_cfg_str(cfg_args)
                 else:
                     cfg_str = cfg_
@@ -711,10 +723,13 @@ class ClusterCtrl(object):
             loaded_plugins = []
             for store in store_group:
                 if store_group[store]["plugin"]["name"] not in loaded_plugins:
-                    fd.write(f'load name={store_group[store]["plugin"]["name"]}\n')
+                    fd.write(f'load name={store_group[store]["plugin"]["name"]}')
+                    if 'plugin' in store_group[store]["plugin"]:
+                        fd.write(f' plugin={store_group[store]["plugin"]["plugin"]}')
+                    fd.write('\n')
                     for cfg_ in store_group[store]["plugin"]["config"]:
                         if type(cfg_) is dict:
-                            cfg_str = parse_cfg_str(cfg_)
+                            cfg_str = parse_to_cfg_str(cfg_)
                         else:
                             cfg_str = cfg_
                         fd.write(f'config name={store_group[store]["plugin"]["name"]} '+

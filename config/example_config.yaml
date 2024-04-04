@@ -131,12 +131,13 @@ aggregators:
 samplers:
   - daemons : "sampler-1"
     plugins :
-      - name        : meminfo # Variables can be specific to plugin
+      - name        : meminfo1 # Unique name for plugin in the event of multi-instance plugins
+        plugin      : meminfo # The name of the plugin to load.
         interval    : 1.0s # Used when starting the sampler plugin
         offset      : "0s"
-        config : [ 'schema=meminfo producer=sampler-1 instance=sampler-1/meminfo perm=0777' ]
+        config : [ 'schema=meminfo producer=sampler-1 instance=sampler-1/meminfo perm=0777' ] # Variables can be specific to plugin
 
-      - name        : vmstat
+      - name        : vmstat # If no plugin is specified, the name will be loaded as the plugin.
         interval    : "2.0s"
         offset      : "1ms"
         config : 

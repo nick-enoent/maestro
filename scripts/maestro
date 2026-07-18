@@ -92,17 +92,17 @@ class MaestroMonitor(object):
         self.comms = self.build_comms()
         self.raft_handler(self.init_mi_state)
         self.etcd_event_handler = {
-            'endpoints'   : self.__reconf_endpoints,
-            'daemons'     : self.__reconf_daemons,
-            'aggregators' : self.__reconf_aggregators,
-            'producers'   : self.__reconf_producers,
-            'samplers'    : self.__reconf_samplers,
-            'stores'      : self.__reconf_stores,
-            'updaters'    : self.__reconf_updaters
+            'endpoints'   : self._reconf_endpoints,
+            'daemons'     : self._reconf_daemons,
+            'aggregators' : self._reconf_aggregators,
+            'producers'   : self._reconf_producers,
+            'samplers'    : self._reconf_samplers,
+            'stores'      : self._reconf_stores,
+            'updaters'    : self._reconf_updaters
         }
         self.rebalance_handler = {
-            'producers' : self.__rebalance_prdcrs,
-            'sets'      : self.__rebalance_sets
+            'producers' : self._rebalance_prdcrs,
+            'sets'      : self._rebalance_sets
         }
 
     def on_syncobj_state_changed(self, old_state, new_state):
@@ -368,25 +368,25 @@ class MaestroMonitor(object):
                 cfg[s[-1]] = v.decode('utf-8')
         return config
 
-    def __reconf_endpoints(self, config):
+    def _reconf_endpoints(self, config):
         pass
 
-    def __reconf_daemons(self, config):
+    def _reconf_daemons(self, config):
         pass
 
-    def __reconf_aggregators(self, config):
+    def _reconf_aggregators(self, config):
         self.set_aggs()
 
-    def __reconf_producers(self, config):
+    def _reconf_producers(self, config):
         pass
 
-    def __reconf_samplers(self, config):
+    def _reconf_samplers(self, config):
         self.res_samplers = True
 
-    def __reconf_stores(self, config):
+    def _reconf_stores(self, config):
         pass
 
-    def __reconf_updaters(self, config):
+    def _reconf_updaters(self, config):
         pass
 
     def balance_set_remainder(self, group, grp_aggs, grp_sets, rem):
@@ -470,7 +470,7 @@ class MaestroMonitor(object):
             all_sets[group]['dset_size'] = dset_size
         return all_sets
 
-    def __balance_prdcr_grp(self, group, agg_state):
+    def _balance_prdcr_grp(self, group, agg_state):
         if self.syncobj and group not in self.aggregators:
             return 0
         grp_prods = list(self.producers[group].keys())
@@ -491,7 +491,7 @@ class MaestroMonitor(object):
                 break
         return 0
 
-    def __balance_advertised_prdcrs(self, group, agg_state):
+    def _balance_advertised_prdcrs(self, group, agg_state):
         grp_aggs = []
         for agg in self.ldmsd_state[group]:
             if self.ldmsd_state[group][agg] == 'ready':
@@ -554,20 +554,20 @@ class MaestroMonitor(object):
             self.aggregators[group][agg]['prdcrs'] = agg_prods
         return 0
 
-    def __rebalance_prdcrs(self, agg_state=None):
+    def _rebalance_prdcrs(self, agg_state=None):
         # Ignore rebalance if this maestro instance has no aggregators
         if not agg_state:
             return
         for group in self.producers:
-            rc = self.__balance_prdcr_grp(group, agg_state)
+            rc = self._balance_prdcr_grp(group, agg_state)
             if rc:
                 log.info('Aggregators responsible for producers %s are not responsive', group)
         for group in self.prdcr_listeners:
-            rc = self.__balance_advertised_prdcrs(group, agg_state)
+            rc = self._balance_advertised_prdcrs(group, agg_state)
             if rc:
                 log.info('Aggregators responsible for advertisers %s are not responsive', group)
 
-    def __rebalance_sets(self, agg_state=None):
+    def _rebalance_sets(self, agg_state=None):
         if not agg_state:
             return
         # Build set groups
@@ -579,7 +579,7 @@ class MaestroMonitor(object):
                     skip = True
                 break
             if skip:
-                self.__balance_prdcr_grp(group, agg_state)
+                self._balance_prdcr_grp(group, agg_state)
                 continue
             dset_size = all_sets[group]['dset_size']
             grp_sets = all_sets[group]['prdcrs']
@@ -637,10 +637,10 @@ class MaestroMonitor(object):
         self.set_cfg_cntr()
         return 0
 
-    def __etcd_caller(self, event):
-        self.__etcd_callback(event.events[0])
+    def _etcd_caller(self, event):
+        self._etcd_callback(event.events[0])
 
-    def __etcd_callback(self, event):
+    def _etcd_callback(self, event):
         try:
             self.lock.acquire()
             if type(event) != etcd3.events.PutEvent:
@@ -660,7 +660,7 @@ class MaestroMonitor(object):
             self.lock.release()
         except Exception as e:
             a, b, c = sys.exc_info()
-            log.warning("__etcd_callback: %s %s", e, str(c.tb_lineno))
+            log.warning("_etcd_callback: %s %s", e, str(c.tb_lineno))
 
     def init_mi_state(self):
         if self.syncobj._isLeader():
@@ -749,7 +749,7 @@ class MaestroMonitor(object):
         last_state = {}
         pfx = '/'+self.prefix
         self.chng_id = self.client.add_watch_callback(pfx+'/last_updated',
-                                                      self.__etcd_caller)
+                                                      self._etcd_caller)
         while True:
             self.lock.acquire() # protects self.do_rebalance and self.conf
             self.raft_handler(self.raft_check)
@@ -781,6 +781,73 @@ class MaestroMonitor(object):
                 rc = self.rebalance(self.ldmsd_state)
                 log.info('Finished load balancing.')
             self.lock.release()
+            time.sleep(self.args.loop_timeout)
+
+class BenchmarkMonitor(MaestroMonitor):
+    maestro_monitor = MaestroMonitor.cluster_monitor
+
+    def __init__(self, spec, args):
+        MaestroMonitor.__init__(self, spec, args)
+
+    def cluster_monitor(self):
+        bdata = {}
+        last_state = {}
+        pfx = '/'+self.prefix
+        self.chng_id = self.client.add_watch_callback(pfx+'/last_updated',
+                                                      self._etcd_caller)
+        b_log.write('{ "benchmark_data" : [\n')
+        while True:
+            time_start = time.perf_counter()
+            self.lock.acquire() # protects self.do_rebalance and self.conf
+            self.raft_handler(self.raft_check)
+            if self.syncobj:
+                if self.do_raft_balance[self.myaddr] != 0:
+                    rc = self.raft_balance()
+                    self.do_rebalance = True
+                    log.info('Finished maesto raft balancing')
+            query_start = time.perf_counter()
+            self.query_ldmsd_state()
+            query_end = time.perf_counter()
+            query_d = query_end - query_start
+            bdata['query_time'] = query_d
+            ldmsd_state_start = time.perf_counter()
+            if self.ldmsd_state:
+                for group in (group for group in self.ldmsd_state if group in self.ldmsd_state):
+                    # Updated configuration, do full rebalance
+                    if group not in last_state:
+                        log.info('New group detected - Rebalance')
+                        self.do_rebalance = True
+                        last_state = self.ldmsd_state
+                        break
+                    for dmn in self.ldmsd_state[group]:
+                        if dmn not in last_state[group]:
+                            log.info('New daemon detected - Rebalance')
+                            self.do_rebalance = True
+                        elif last_state[group][dmn].lower() != self.ldmsd_state[group][dmn].lower():
+                            log.info('Daemon state change - Rebalance')
+                            self.raft_handler(self.update_mi_state)
+                            self.do_rebalance = True
+                        last_state[group][dmn] = self.ldmsd_state[group][dmn]
+            ldmsd_state_end = time.perf_counter()
+            ldmsd_d = ldmsd_state_end - ldmsd_state_start
+            bdata['ldmsd_state_check_time'] = ldmsd_d
+            if self.do_rebalance:
+                log.info('Rebalance cluster...')
+                rb_start = time.perf_counter()
+                rc = self.rebalance(self.ldmsd_state)
+                rb_end = time.perf_counter()
+                rb_d = rb_end - rb_start
+                bdata['rebalance_time'] = rb_d
+                log.info('Finished load balancing.')
+            else:
+                rb_d = 0
+                bdata['rebalance_time'] = rb_d
+            self.lock.release()
+            time_end = time.perf_counter()
+            time_d = time_end - time_start
+            bdata['total_time'] = time_d
+            b_log.write(f'{json.dumps(bdata)},\n')
+            b_log.flush()
             time.sleep(self.args.loop_timeout)
 
 def config_samplers(comms, plugins, samplers, cfg_smplrs):
@@ -1269,6 +1336,17 @@ def subscribe(comms, producers, aggregators, daemons, agg_state):
                     if rc:
                         log.error('Error %d subscribing to %s: %s.', rc, sub["message_tag"],err)
 
+def finalize_json(benchmark=False):
+    if not benchmark:
+        return
+    b_log.close()
+    fp = open(f'{args.benchmark}/benchmark.json', 'rb+')
+    fp.seek(0, os.SEEK_END)
+    pos = fp.tell()
+    fp.seek(pos - 2)
+    fp.write(b"]}")
+    fp.truncate()
+
 RAFT_STATE_TBL = {
         0: "FOLLOWER",
         1: "CANDIDATE",
@@ -1306,6 +1384,8 @@ if __name__ == "__main__":
                         help="Log level (debug, info, warn, error, fatal)")
     parser.add_argument("--debug", action='store_true',
                         help="Enable debug information")
+    parser.add_argument("--benchmark", default=None,
+                        help="Path to a file with benchmark data in json format")
     parser.set_defaults(debug=False)
     args = parser.parse_args()
     if not args.debug:
@@ -1336,14 +1416,23 @@ if __name__ == "__main__":
     # All keys in the DB are prefixed with the cluster name, 'pfx'. So we can
     # have multiple monitoring hosted by the same consensus cluster.
 
-    maestro = MaestroMonitor(etcd_spec, args)
+    if not args.benchmark:
+        maestro = MaestroMonitor(etcd_spec, args)
+    else:
+        maestro = BenchmarkMonitor(etcd_spec, args)
+        b_log = open(f'{args.benchmark}/benchmark.json', 'w')
 
     # At each load-balance group level the aggregators have all
     # producers; however, only the producers assigned to each
     # aggregator are started. This practice reduces the latency
     # when an aggregator needs to pick up the load from a
     # failed peer
-    maestro.cluster_monitor()
+    try:
+        maestro.cluster_monitor()
+    except KeyboardInterrupt:
+        log.info('Exit requested. Exiting...')
+    finally:
+        finalize_json(args.benchmark)
     # evq = queue.Queue()
     # mthread = threading.Thread(target=cluster_monitor)
     # mthread.start()
